@@ -58,7 +58,10 @@ export default function ScannerPage() {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
         });
-        if (cancelled) return;
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
         setStatus("Point your camera at a QR code");
