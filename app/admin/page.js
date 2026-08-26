@@ -50,8 +50,23 @@ export default function AdminPage() {
   }
 
   async function handleDelete(id) {
-    await fetch(`/api/items/${id}`, { method: "DELETE" });
-    await loadItems();
+    try {
+      const res = await fetch(`/api/items/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        let message = "Failed to delete item";
+        try {
+          const body = await res.json();
+          if (body.error) message = body.error;
+        } catch {
+          // response body wasn't JSON; keep the fallback message
+        }
+        throw new Error(message);
+      }
+      setError(null);
+      await loadItems();
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   return (
