@@ -530,10 +530,13 @@ export async function GET(request, { params }) {
 Confirm the dev server is running first: check via `preview_list`; if the `ar-qr-nextjs` server isn't listed as running, start it with `preview_start` (`name: "ar-qr-nextjs"`).
 
 ```bash
-ID=$(curl -s -X POST http://localhost:3000/api/items \
+RESPONSE=$(curl -s -X POST http://localhost:3000/api/items \
   -F "name=QR Test Item" \
   -F "glb=@assets/model.glb;type=model/gltf-binary" \
-  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip")
+ID=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+GLB_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['glbUrl'])")
+USDZ_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['usdzUrl'])")
 curl -s -o /tmp/test-qr.png -D - "http://localhost:3000/api/items/$ID/qr"
 ```
 Expected: response headers include `Content-Type: image/png`; `/tmp/test-qr.png` is a non-trivial-size file.
@@ -546,10 +549,10 @@ with open('/tmp/test-qr.png','rb') as f:
 ```
 Expected: `True`.
 
-Clean up:
+Clean up (note: `$GLB_URL`/`$USDZ_URL` are paths like `/uploads/xxx.glb` from the local-fallback storage — prefixing with `public` gives the real file path; this only holds true while testing locally without Vercel Blob configured, which is the case throughout this plan):
 ```bash
 curl -s -X DELETE "http://localhost:3000/api/items/$ID"
-rm public/uploads/*QR*Test* /tmp/test-qr.png 2>/dev/null || true
+rm -f "public$GLB_URL" "public$USDZ_URL" /tmp/test-qr.png
 ```
 
 - [ ] **Step 3: Commit**
@@ -629,10 +632,13 @@ Note: `<model-viewer>` is a custom element, so React/Next may log a warning abou
 Confirm the dev server is running first: check via `preview_list`; if the `ar-qr-nextjs` server isn't listed as running, start it with `preview_start` (`name: "ar-qr-nextjs"`).
 
 ```bash
-ID=$(curl -s -X POST http://localhost:3000/api/items \
+RESPONSE=$(curl -s -X POST http://localhost:3000/api/items \
   -F "name=Viewer Test Item" \
   -F "glb=@assets/model.glb;type=model/gltf-binary" \
-  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip")
+ID=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+GLB_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['glbUrl'])")
+USDZ_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['usdzUrl'])")
 echo "Test item id: $ID"
 ```
 
@@ -643,7 +649,7 @@ Also verify the 404 path: navigate to `http://localhost:3000/view/nonexistent-id
 Clean up the test item:
 ```bash
 curl -s -X DELETE "http://localhost:3000/api/items/$ID"
-rm public/uploads/*Viewer*Test*
+rm -f "public$GLB_URL" "public$USDZ_URL"
 ```
 
 - [ ] **Step 4: Commit**
@@ -801,17 +807,20 @@ Navigate to `http://localhost:3000/admin`. Use `read_page` to confirm the form (
 Because the sandboxed Browser tool can't attach local files to a file input, verify the actual add/delete flow via curl (already proven working in Task 4) rather than driving the file inputs — then reload `/admin` in the browser and confirm a curl-created item appears in the list:
 
 ```bash
-ID=$(curl -s -X POST http://localhost:3000/api/items \
+RESPONSE=$(curl -s -X POST http://localhost:3000/api/items \
   -F "name=Admin List Test" \
   -F "glb=@assets/model.glb;type=model/gltf-binary" \
-  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip")
+ID=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+GLB_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['glbUrl'])")
+USDZ_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['usdzUrl'])")
 ```
 
 Reload `/admin` in the browser, confirm via `read_page` that "Admin List Test" now appears in the table. Then clean up:
 
 ```bash
 curl -s -X DELETE "http://localhost:3000/api/items/$ID"
-rm public/uploads/*Admin*List*
+rm -f "public$GLB_URL" "public$USDZ_URL"
 ```
 
 Reload `/admin` again, confirm the row is gone.
@@ -1063,10 +1072,13 @@ Restart the dev server afterward if the build step stopped it (`preview_start`, 
 - [ ] **Step 2: Confirm the full CRUD path end-to-end** (beyond just the seeded item)
 
 ```bash
-ID=$(curl -s -X POST http://localhost:3000/api/items \
+RESPONSE=$(curl -s -X POST http://localhost:3000/api/items \
   -F "name=E2E Test Item" \
   -F "glb=@assets/model.glb;type=model/gltf-binary" \
-  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+  -F "usdz=@assets/model.usdz;type=model/vnd.usdz+zip")
+ID=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+GLB_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['glbUrl'])")
+USDZ_URL=$(echo "$RESPONSE" | python -c "import sys,json;print(json.load(sys.stdin)['usdzUrl'])")
 curl -s "http://localhost:3000/api/items/$ID"
 curl -s -o /tmp/e2e-qr.png "http://localhost:3000/api/items/$ID/qr"
 python -c "
@@ -1075,9 +1087,9 @@ with open('/tmp/e2e-qr.png','rb') as f:
 "
 curl -s -X DELETE "http://localhost:3000/api/items/$ID"
 curl -s http://localhost:3000/api/items
-rm public/uploads/*E2E*Test* /tmp/e2e-qr.png 2>/dev/null || true
+rm -f "public$GLB_URL" "public$USDZ_URL" /tmp/e2e-qr.png
 ```
-Expected: item fetched successfully, QR PNG signature check prints `True`, and the final `GET /api/items` no longer includes the deleted item (should just show `demo`).
+Expected: item fetched successfully, QR PNG signature check prints `True`, and the final `GET /api/items` no longer includes the deleted item (should just show `demo` — the seeded item from Task 9, which this cleanup must NOT touch since it deletes by exact path, not a wildcard).
 
 - [ ] **Step 3: Confirm all three pages load without console errors**
 
