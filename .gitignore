@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+node_modules/
+.next/
+data/
+public/uploads/
+.env*.local
