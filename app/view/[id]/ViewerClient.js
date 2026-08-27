@@ -31,7 +31,7 @@ export default function ViewerClient({ item }) {
         </div>
         {showWireframe && (
           <div style={{ width: "100%", height: "100%" }}>
-            <WireframeViewer glbUrl={item.glbUrl} />
+            <WireframeViewer glbUrl={item.glbUrl} shape={item.shape} />
           </div>
         )}
       </div>
