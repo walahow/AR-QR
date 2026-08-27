@@ -4,8 +4,24 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { buildPrimitiveParams, isValidShape } from "@/lib/wireframePrimitive";
 
-export default function WireframeViewer({ glbUrl }) {
+function createGeometryFromParams(params) {
+  switch (params.type) {
+    case "box":
+      return new THREE.BoxGeometry(params.width, params.height, params.depth);
+    case "sphere":
+      return new THREE.SphereGeometry(params.radius, 24, 16);
+    case "cylinder":
+      return new THREE.CylinderGeometry(params.radius, params.radius, params.height, 32);
+    case "cone":
+      return new THREE.ConeGeometry(params.radius, params.height, params.sides);
+    default:
+      throw new Error(`Unknown geometry type: ${params.type}`);
+  }
+}
+
+export default function WireframeViewer({ glbUrl, shape }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -21,41 +37,42 @@ export default function WireframeViewer({ glbUrl }) {
       0.01,
       1000
     );
-    camera.position.set(0, 0.5, 2);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 1));
-
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
     const loader = new GLTFLoader();
     let disposed = false;
+    let primitiveMesh = null;
 
     loader.load(glbUrl, (gltf) => {
       if (disposed) return;
-      const model = gltf.scene;
-      model.traverse((child) => {
-        if (child.isMesh) {
-          child.material = new THREE.MeshBasicMaterial({
-            color: 0x00ff88,
-            wireframe: true,
-          });
-        }
+
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const size = box.getSize(new THREE.Vector3());
+
+      const resolvedShape = isValidShape(shape) ? shape : "cube";
+      const params = buildPrimitiveParams(resolvedShape, {
+        width: size.x || 0.01,
+        height: size.y || 0.01,
+        depth: size.z || 0.01,
       });
 
-      const box = new THREE.Box3().setFromObject(model);
-      const size = box.getSize(new THREE.Vector3()).length() || 1;
-      const center = box.getCenter(new THREE.Vector3());
-      model.position.sub(center);
-      controls.target.set(0, 0, 0);
-      camera.position.set(0, size * 0.3, size * 1.2);
+      const geometry = createGeometryFromParams(params);
+      primitiveMesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true })
+      );
+      scene.add(primitiveMesh);
 
-      scene.add(model);
+      const radius = size.length() || 1;
+      controls.target.set(0, 0, 0);
+      camera.position.set(0, radius * 0.2, radius * 1.2);
     });
 
     let frameId;
@@ -80,9 +97,13 @@ export default function WireframeViewer({ glbUrl }) {
       window.removeEventListener("resize", handleResize);
       controls.dispose();
       renderer.dispose();
+      if (primitiveMesh) {
+        primitiveMesh.geometry.dispose();
+        primitiveMesh.material.dispose();
+      }
       container.removeChild(renderer.domElement);
     };
-  }, [glbUrl]);
+  }, [glbUrl, shape]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
