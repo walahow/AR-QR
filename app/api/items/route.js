@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { listItems, createItem } from "@/lib/store";
 import { uploadFile } from "@/lib/blob";
+import { SHAPES } from "@/lib/wireframePrimitive";
 
 export async function GET() {
   const items = await listItems();
@@ -11,6 +12,7 @@ export async function GET() {
 export async function POST(request) {
   let formData;
   let name;
+  let shape;
   let glbFile;
   let usdzFile;
   let glbBuffer;
@@ -19,6 +21,7 @@ export async function POST(request) {
   try {
     formData = await request.formData();
     name = formData.get("name");
+    shape = formData.get("shape");
     glbFile = formData.get("glb");
     usdzFile = formData.get("usdz");
 
@@ -33,13 +36,17 @@ export async function POST(request) {
 
   if (
     !name ||
+    !shape ||
+    !SHAPES.includes(shape) ||
     !glbFile ||
     !usdzFile ||
     glbFile.size === 0 ||
     usdzFile.size === 0
   ) {
     return NextResponse.json(
-      { error: "name, glb, and usdz are all required" },
+      {
+        error: `name, shape (one of ${SHAPES.join(", ")}), glb, and usdz are all required`,
+      },
       { status: 400 }
     );
   }
@@ -52,6 +59,7 @@ export async function POST(request) {
   const item = {
     id,
     name: String(name),
+    shape: String(shape),
     glbUrl,
     usdzUrl,
     createdAt: new Date().toISOString(),
