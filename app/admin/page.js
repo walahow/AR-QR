@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SHAPES } from "@/lib/wireframePrimitive";
 
 export default function AdminPage() {
   const [items, setItems] = useState([]);
   const [name, setName] = useState("");
+  const [shape, setShape] = useState(SHAPES[0]);
   const [glbFile, setGlbFile] = useState(null);
   const [usdzFile, setUsdzFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +33,7 @@ export default function AdminPage() {
     try {
       const formData = new FormData();
       formData.append("name", name);
+      formData.append("shape", shape);
       formData.append("glb", glbFile);
       formData.append("usdz", usdzFile);
       const res = await fetch("/api/items", { method: "POST", body: formData });
@@ -39,6 +42,7 @@ export default function AdminPage() {
         throw new Error(body.error || "Failed to create item");
       }
       setName("");
+      setShape(SHAPES[0]);
       setGlbFile(null);
       setUsdzFile(null);
       await loadItems();
@@ -88,6 +92,20 @@ export default function AdminPage() {
           />
         </label>
         <label style={{ display: "block", marginBottom: 12 }}>
+          Shape (for wireframe mode)
+          <select
+            value={shape}
+            onChange={(e) => setShape(e.target.value)}
+            style={{ display: "block", width: "100%", marginTop: 4, padding: 8, border: "2px solid #000" }}
+          >
+            {SHAPES.map((s) => (
+              <option key={s} value={s}>
+                {s[0].toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "block", marginBottom: 12 }}>
           .glb file
           <input
             type="file"
@@ -115,6 +133,7 @@ export default function AdminPage() {
         <thead>
           <tr>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>Name</th>
+            <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>Shape</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>QR</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}></th>
           </tr>
@@ -123,6 +142,7 @@ export default function AdminPage() {
           {items.map((item) => (
             <tr key={item.id}>
               <td style={{ padding: 8 }}>{item.name}</td>
+              <td style={{ padding: 8 }}>{item.shape ?? "—"}</td>
               <td style={{ padding: 8 }}>
                 <a href={`/api/items/${item.id}/qr`} target="_blank" rel="noreferrer">
                   View QR
