@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SHAPES } from "@/lib/wireframePrimitive";
+import { compileAndUploadTarget } from "./compileTarget";
 
 export default function AdminPage() {
   const [items, setItems] = useState([]);
@@ -11,6 +12,7 @@ export default function AdminPage() {
   const [usdzFile, setUsdzFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [targetStatus, setTargetStatus] = useState({}); // itemId -> "compiling" | "ready" | "failed"
 
   async function loadItems() {
     const res = await fetch("/api/items");
@@ -21,6 +23,18 @@ export default function AdminPage() {
   useEffect(() => {
     loadItems();
   }, []);
+
+  async function runCompile(itemId) {
+    setTargetStatus((s) => ({ ...s, [itemId]: "compiling" }));
+    try {
+      await compileAndUploadTarget(itemId);
+      setTargetStatus((s) => ({ ...s, [itemId]: "ready" }));
+      await loadItems();
+    } catch (err) {
+      console.error("AR target compile failed:", err);
+      setTargetStatus((s) => ({ ...s, [itemId]: "failed" }));
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -41,6 +55,8 @@ export default function AdminPage() {
         const body = await res.json();
         throw new Error(body.error || "Failed to create item");
       }
+      const created = await res.json();
+      runCompile(created.id);
       setName("");
       setShape(SHAPES[0]);
       setGlbFile(null);
@@ -128,6 +144,9 @@ export default function AdminPage() {
           {submitting ? "Uploading..." : "Add Item"}
         </button>
       </form>
+      <p style={{ fontSize: 14 }}>
+        Print each item&apos;s QR code at 8cm wide for accurate AR tracking.
+      </p>
 
       <table style={{ width: "100%", maxWidth: 480, marginTop: 32, borderCollapse: "collapse" }}>
         <thead>
@@ -135,6 +154,7 @@ export default function AdminPage() {
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>Name</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>Shape</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>QR</th>
+            <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>AR Target</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}></th>
           </tr>
         </thead>
@@ -147,6 +167,20 @@ export default function AdminPage() {
                 <a href={`/api/items/${item.id}/qr`} target="_blank" rel="noreferrer">
                   View QR
                 </a>
+              </td>
+              <td style={{ padding: 8 }}>
+                {targetStatus[item.id] === "compiling" ? (
+                  "Compiling…"
+                ) : item.arTargetUrl || targetStatus[item.id] === "ready" ? (
+                  "Ready"
+                ) : (
+                  <>
+                    Missing{" "}
+                    <button type="button" onClick={() => runCompile(item.id)}>
+                      Retry
+                    </button>
+                  </>
+                )}
               </td>
               <td style={{ padding: 8 }}>
                 <button type="button" onClick={() => handleDelete(item.id)}>
