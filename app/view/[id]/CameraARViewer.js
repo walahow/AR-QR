@@ -28,6 +28,7 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
     if (!container) return;
     let disposed = false;
     let mindarThree = null;
+    let removeDragHandlers = null;
 
     function disposeMaterial(material) {
       if (!material) return;
@@ -93,6 +94,42 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       // the marker's real printed width, not multiplying by it.
       contentGroup.scale.setScalar(1 / PHYSICAL_QR_SIZE_METERS);
       anchor.group.add(contentGroup);
+
+      // Let the user spin the placed object with a drag, since - unlike the
+      // plain model-viewer mode - the camera here is the real phone camera
+      // driven by MindAR's tracking, so there's no camera to orbit around it
+      // instead. MindAR's flat-marker convention has content's local Z as
+      // the marker's normal (pointing out of the tracked surface) and X/Y
+      // spanning the marker's own plane, so dragging horizontally spins the
+      // object like a turntable (rotate around Z) and dragging vertically
+      // tilts it (rotate around X).
+      let dragging = false;
+      let lastX = 0;
+      let lastY = 0;
+      const onPointerDown = (e) => {
+        dragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+      };
+      const onPointerMove = (e) => {
+        if (!dragging) return;
+        contentGroup.rotation.z += (e.clientX - lastX) * 0.01;
+        contentGroup.rotation.x += (e.clientY - lastY) * 0.01;
+        lastX = e.clientX;
+        lastY = e.clientY;
+      };
+      const onPointerUp = () => {
+        dragging = false;
+      };
+      container.style.touchAction = "none";
+      container.addEventListener("pointerdown", onPointerDown);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      removeDragHandlers = () => {
+        container.removeEventListener("pointerdown", onPointerDown);
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+      };
 
       anchor.onTargetFound = () => {
         if (!disposed) setStatus("tracking");
@@ -188,6 +225,7 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
 
     return () => {
       disposed = true;
+      removeDragHandlers?.();
       if (shadedRef.current) disposeObject3D(shadedRef.current);
       if (wireframeRef.current) {
         wireframeRef.current.geometry?.dispose();
