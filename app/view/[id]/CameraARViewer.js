@@ -84,7 +84,14 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       const anchor = mindarThree.addAnchor(0);
 
       const contentGroup = new THREE.Group();
-      contentGroup.scale.setScalar(PHYSICAL_QR_SIZE_METERS);
+      // MindAR has no real-world scale awareness: content placed under
+      // anchor.group uses "1 content unit = 1 full marker width" (its
+      // postMatrix scales anchor-local coordinates by the compiled target
+      // image's pixel width, treating that as the world unit). glTF/GLB
+      // files always use meters, so converting a model authored in true
+      // meters into that "1 unit = 1 marker-width" space means dividing by
+      // the marker's real printed width, not multiplying by it.
+      contentGroup.scale.setScalar(1 / PHYSICAL_QR_SIZE_METERS);
       anchor.group.add(contentGroup);
 
       anchor.onTargetFound = () => {
