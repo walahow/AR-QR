@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    resolveAlias: {
+      fs: { browser: "./lib/empty.js" },
+    },
+  },
   async headers() {
     return [
       {

@@ -13,12 +13,13 @@
   "dependencies": {
     "@vercel/blob": "2.8.0",
     "jsqr": "1.4.0",
+    "mind-ar": "^1.2.5",
     "mongodb": "6.3.0",
     "nanoid": "6.0.1",
     "next": "16.3.3",
     "qrcode": "1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "three": "^0.185.1"
+    "three": "^0.150.0"
   }
 }
