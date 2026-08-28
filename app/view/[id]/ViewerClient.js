@@ -50,29 +50,31 @@ export default function ViewerClient({ item }) {
         )}
       </div>
       <div style={{ padding: 16, borderTop: "4px solid #000", width: "100%", display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
-        <h2 style={{ margin: 0 }}>{item.name}</h2>
-        <ModeSwitch
-          value={showWireframe ? "wireframe" : "normal"}
-          onChange={(v) => setShowWireframe(v === "wireframe")}
-          options={[
-            { value: "normal", label: "Normal" },
-            { value: "wireframe", label: "Wireframe" },
-          ]}
-        />
-        <p style={{ margin: 0 }}>
-          {showWireframe
-            ? "Drag to rotate the shape."
-            : "Tap the AR icon to place this in your space."}
-        </p>
         {!cameraARActive && (
-          <button
-            type="button"
-            onClick={() => setCameraARActive(true)}
-            disabled={!item.arTargetUrl}
-            title={item.arTargetUrl ? undefined : "AR target not ready for this item yet"}
-          >
-            {item.arTargetUrl ? "Start AR" : "AR Not Ready"}
-          </button>
+          <>
+            <h2 style={{ margin: 0 }}>{item.name}</h2>
+            <ModeSwitch
+              value={showWireframe ? "wireframe" : "normal"}
+              onChange={(v) => setShowWireframe(v === "wireframe")}
+              options={[
+                { value: "normal", label: "Normal" },
+                { value: "wireframe", label: "Wireframe" },
+              ]}
+            />
+            <p style={{ margin: 0 }}>
+              {showWireframe
+                ? "Drag to rotate the shape."
+                : "Tap the AR icon to place this in your space."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setCameraARActive(true)}
+              disabled={!item.arTargetUrl}
+              title={item.arTargetUrl ? undefined : "AR target not ready for this item yet"}
+            >
+              {item.arTargetUrl ? "Start AR" : "AR Not Ready"}
+            </button>
+          </>
         )}
       </div>
     </div>
