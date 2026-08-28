@@ -106,11 +106,23 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
         if (disposed) return;
 
         const shaded = gltf.scene;
+
+        // Measure and re-center BEFORE parenting under contentGroup: once
+        // added, Box3.setFromObject would include contentGroup/anchor.group's
+        // matrices (anchor.group's isn't meaningful yet - it's only ever
+        // written by the tracker's per-frame onUpdate, which hasn't run at
+        // load time), so the box has to be taken in the model's own local
+        // space first. Most GLBs aren't authored with their origin at their
+        // bounding-box center, so without this the model renders offset from
+        // the marker instead of centered on it.
+        const box = new THREE.Box3().setFromObject(shaded);
+        const center = box.getCenter(new THREE.Vector3());
+        shaded.position.sub(center);
+
         shaded.visible = !showWireframeRef.current;
         shadedRef.current = shaded;
         contentGroup.add(shaded);
 
-        const box = new THREE.Box3().setFromObject(shaded);
         const size = box.getSize(new THREE.Vector3());
         const resolvedShape = isValidShape(shape) ? shape : "cube";
         const params = buildPrimitiveParams(resolvedShape, {
