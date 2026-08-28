@@ -9,15 +9,35 @@ function loadImage(url) {
   });
 }
 
+function withTimeout(promise, ms, message) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 export async function compileAndUploadTarget(itemId, onProgress) {
   const { Compiler } = await import("mind-ar/dist/mindar-image.prod.js");
 
   const img = await loadImage(`/api/items/${itemId}/qr`);
 
   const compiler = new Compiler();
-  await compiler.compileImageTargets([img], (percent) => {
-    onProgress?.(percent);
-  });
+  await withTimeout(
+    compiler.compileImageTargets([img], (percent) => {
+      onProgress?.(percent);
+    }),
+    30000,
+    "Compiling the AR target timed out. Try again."
+  );
   const buffer = await compiler.exportData();
 
   const res = await fetch(`/api/items/${itemId}/target`, {
