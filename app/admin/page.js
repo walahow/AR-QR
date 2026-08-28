@@ -172,7 +172,12 @@ export default function AdminPage() {
                 {targetStatus[item.id] === "compiling" ? (
                   "Compiling…"
                 ) : item.arTargetUrl || targetStatus[item.id] === "ready" ? (
-                  "Ready"
+                  <>
+                    Ready{" "}
+                    <button type="button" onClick={() => runCompile(item.id)}>
+                      Recompile
+                    </button>
+                  </>
                 ) : (
                   <>
                     Missing{" "}

@@ -6,12 +6,13 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { buildPrimitiveParams, isValidShape } from "@/lib/wireframePrimitive";
 import { createGeometryFromParams } from "./geometryFromParams";
 import { PHYSICAL_QR_SIZE_METERS } from "@/lib/arConfig";
+import { withTimeout } from "@/lib/withTimeout";
 import ModeSwitch from "./ModeSwitch";
 
 export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
   const containerRef = useRef(null);
   const [showWireframe, setShowWireframe] = useState(false);
-  const [status, setStatus] = useState("starting"); // starting | scanning | tracking | error
+  const [status, setStatus] = useState("starting"); // starting | scanning | tracking | error | target-error
   const showWireframeRef = useRef(showWireframe);
   const shadedRef = useRef(null);
   const wireframeRef = useRef(null);
@@ -120,9 +121,29 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       });
 
       try {
-        await mindarThree.start();
-      } catch {
-        if (!disposed) setStatus("error");
+        // MindAR's start() chain (_startAR -> controller.addImageTargets) wraps
+        // its work in `new Promise(async (resolve, reject) => {...})`. If
+        // anything in there throws - e.g. decoding a corrupt/invalid
+        // arTargetUrl - that async executor's throw never calls reject(), so
+        // the returned promise hangs forever instead of rejecting: the camera
+        // preview (already attached earlier in _startVideo) keeps showing,
+        // but scanning/rendering never starts and no error ever surfaces.
+        // This timeout is the only way to detect that and show the error
+        // state instead of hanging silently - same pattern already used for
+        // compileImageTargets in compileTarget.js.
+        await withTimeout(
+          mindarThree.start(),
+          20000,
+          "AR_START_TIMEOUT"
+        );
+      } catch (err) {
+        // _startVideo() rejects fast and explicitly on a real camera-access
+        // failure (its Promise executor isn't async, so throws/rejects
+        // propagate normally). Only our own timeout error means _startVideo
+        // succeeded (camera is live) and the hang happened afterwards, in
+        // target loading/tracking - a different problem with a different fix
+        // (recompile the AR target), so it gets its own status/message.
+        if (!disposed) setStatus(err?.message === "AR_START_TIMEOUT" ? "target-error" : "error");
         return;
       }
       if (disposed) {
@@ -215,6 +236,11 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       {status === "error" && (
         <div style={{ position: "absolute", bottom: 16, left: 16, right: 16, textAlign: "center", color: "#fff", background: "rgba(0,0,0,0.6)", padding: 8 }}>
           Couldn&apos;t access the camera. Check your browser&apos;s camera permission and try again.
+        </div>
+      )}
+      {status === "target-error" && (
+        <div style={{ position: "absolute", bottom: 16, left: 16, right: 16, textAlign: "center", color: "#fff", background: "rgba(0,0,0,0.6)", padding: 8 }}>
+          Couldn&apos;t start AR tracking. This item&apos;s AR target may be missing or corrupt - try recompiling it from the admin page.
         </div>
       )}
     </div>
