@@ -14,6 +14,13 @@ html, body {
   background: var(--bg);
   color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  /* The AR camera view (mind-ar) composites a <video>, a WebGL canvas, and a
+     CSS3D-transformed layer on top of each other. On some mobile browsers
+     this combination can render content outside its logical box despite
+     overflow: hidden on the immediate container - this is a last-resort
+     backstop so the page itself is never horizontally scrollable, regardless
+     of the exact cause. */
+  overflow-x: hidden;
 }
 
 h1, h2, .display {
