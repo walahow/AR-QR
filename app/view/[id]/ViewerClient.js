@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Script from "next/script";
 import WireframeViewer from "./WireframeViewer";
+import ModeSwitch from "./ModeSwitch";
 
 export default function ViewerClient({ item }) {
   const [showWireframe, setShowWireframe] = useState(false);
@@ -37,33 +38,14 @@ export default function ViewerClient({ item }) {
       </div>
       <div style={{ padding: 16, borderTop: "4px solid #000", width: "100%", display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
         <h2 style={{ margin: 0 }}>{item.name}</h2>
-        <div className="frame" style={{ display: "inline-flex" }}>
-          <button
-            type="button"
-            onClick={() => setShowWireframe(false)}
-            aria-pressed={!showWireframe}
-            style={{
-              border: "none",
-              borderRight: "4px solid #000",
-              background: showWireframe ? "#fff" : "#000",
-              color: showWireframe ? "#000" : "#fff",
-            }}
-          >
-            Normal
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowWireframe(true)}
-            aria-pressed={showWireframe}
-            style={{
-              border: "none",
-              background: showWireframe ? "#000" : "#fff",
-              color: showWireframe ? "#fff" : "#000",
-            }}
-          >
-            Wireframe
-          </button>
-        </div>
+        <ModeSwitch
+          value={showWireframe ? "wireframe" : "normal"}
+          onChange={(v) => setShowWireframe(v === "wireframe")}
+          options={[
+            { value: "normal", label: "Normal" },
+            { value: "wireframe", label: "Wireframe" },
+          ]}
+        />
         <p style={{ margin: 0 }}>
           {showWireframe
             ? "Drag to rotate the shape."
