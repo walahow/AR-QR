@@ -70,6 +70,16 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
         uiError: "no",
       });
       const { renderer, scene, camera } = mindarThree;
+
+      // Unlike <model-viewer> (which lights the scene internally), MindAR's
+      // scene starts with zero lights. The loaded glTF's real materials
+      // (typically MeshStandardMaterial) render solid black without any -
+      // the wireframe mode doesn't need this since MeshBasicMaterial is unlit.
+      scene.add(new THREE.AmbientLight(0xffffff, 1));
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+      directionalLight.position.set(0.5, 1, 0.5);
+      scene.add(directionalLight);
+
       const anchor = mindarThree.addAnchor(0);
 
       const contentGroup = new THREE.Group();
