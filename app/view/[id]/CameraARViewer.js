@@ -51,7 +51,19 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       const { MindARThree } = await import("mind-ar/dist/mindar-image-three.prod.js");
       if (disposed) return;
 
-      mindarThree = new MindARThree({ container, imageTargetSrc: arTargetUrl });
+      mindarThree = new MindARThree({
+        container,
+        imageTargetSrc: arTargetUrl,
+        // We already render our own status-driven overlays (scanning prompt,
+        // camera-error message) in the JSX below. MindAR's built-in UI system
+        // (uiLoading/uiScanning/uiError default to "yes") injects its own
+        // separate DOM elements directly into document.body, outside React's
+        // control, so React never cleans them up on unmount/exit. Disabling
+        // all three prevents that DOM injection entirely.
+        uiLoading: "no",
+        uiScanning: "no",
+        uiError: "no",
+      });
       const { renderer, scene, camera } = mindarThree;
       const anchor = mindarThree.addAnchor(0);
 
