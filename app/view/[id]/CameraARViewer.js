@@ -181,7 +181,17 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", background: "#111" }}>
-      <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }} />
+      {/*
+        MindAR sets its <video> element's z-index to -2, intending it to sit
+        behind our (transparent-background) WebGL canvas. Without this div
+        establishing its OWN stacking context, that negative z-index isn't
+        locally scoped - it's evaluated against the page's root stacking
+        context, putting the video behind this AR viewer's own opaque black
+        background instead of just behind the canvas. `position: relative`
+        alone does NOT create a stacking context; it needs a non-auto
+        z-index too.
+      */}
+      <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative", zIndex: 0, overflow: "hidden" }} />
 
       <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <ModeSwitch
