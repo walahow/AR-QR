@@ -28,6 +28,25 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
     let disposed = false;
     let mindarThree = null;
 
+    function disposeMaterial(material) {
+      if (!material) return;
+      Object.values(material).forEach((value) => {
+        if (value && typeof value.dispose === "function") {
+          value.dispose();
+        }
+      });
+      material.dispose();
+    }
+
+    function disposeObject3D(object) {
+      object.traverse((child) => {
+        if (!child.isMesh) return;
+        child.geometry?.dispose();
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach(disposeMaterial);
+      });
+    }
+
     (async () => {
       const { MindARThree } = await import("mind-ar/dist/mindar-image-three.prod.js");
       if (disposed) return;
@@ -79,7 +98,21 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
         if (!disposed) setStatus("error");
         return;
       }
-      if (disposed) return;
+      if (disposed) {
+        // Unmounted while the camera-permission prompt was still showing.
+        // start() has now actually resolved (the camera is live and
+        // tracking began inside it), so this is the first point at which
+        // stop() can succeed - the immediate stop() attempt in the
+        // cleanup function below throws harmlessly before this, since
+        // MindAR's internal controller/video aren't set up until start()
+        // resolves.
+        try {
+          mindarThree.stop();
+        } catch {
+          // ignore - best effort
+        }
+        return;
+      }
       setStatus("scanning");
       renderer.setAnimationLoop(() => {
         renderer.render(scene, camera);
@@ -88,14 +121,28 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
 
     return () => {
       disposed = true;
+      if (shadedRef.current) disposeObject3D(shadedRef.current);
+      if (wireframeRef.current) {
+        wireframeRef.current.geometry?.dispose();
+        disposeMaterial(wireframeRef.current.material);
+      }
       if (mindarThree) {
         mindarThree.renderer?.setAnimationLoop(null);
+        mindarThree.renderer?.dispose();
         try {
           mindarThree.stop();
         } catch {
-          // camera may never have started (e.g. permission denied); nothing to stop
+          // start() may not have resolved yet (e.g. camera permission
+          // prompt still showing) - in that case MindAR's internal
+          // controller/video aren't set and stop() throws. If start()
+          // does resolve after this, the `if (disposed)` branch above
+          // calls stop() again for real.
         }
       }
+      // Note: MindARThree's constructor registers a window 'resize'
+      // listener with no public way to remove it - this is a real,
+      // unfixable leak inside the mind-ar library itself (confirmed by
+      // reading its source), not something addressable from here.
     };
   }, [glbUrl, shape, arTargetUrl]);
 
