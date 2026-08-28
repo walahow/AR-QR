@@ -181,7 +181,7 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", background: "#111" }}>
-      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }} />
 
       <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <ModeSwitch
