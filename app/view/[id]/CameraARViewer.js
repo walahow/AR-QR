@@ -98,11 +98,11 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       // Let the user spin the placed object with a drag, since - unlike the
       // plain model-viewer mode - the camera here is the real phone camera
       // driven by MindAR's tracking, so there's no camera to orbit around it
-      // instead. MindAR's flat-marker convention has content's local Z as
-      // the marker's normal (pointing out of the tracked surface) and X/Y
-      // spanning the marker's own plane, so dragging horizontally spins the
-      // object like a turntable (rotate around Z) and dragging vertically
-      // tilts it (rotate around X).
+      // instead. The GLB itself follows glTF's Y-up convention, so dragging
+      // horizontally spins it like a turntable around its own up axis
+      // (rotate around Y) and dragging vertically tilts it forward/back
+      // (rotate around X) - confirmed against the actual on-device behavior,
+      // not just the marker's own axis convention.
       let dragging = false;
       let lastX = 0;
       let lastY = 0;
@@ -113,7 +113,7 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       };
       const onPointerMove = (e) => {
         if (!dragging) return;
-        contentGroup.rotation.z += (e.clientX - lastX) * 0.01;
+        contentGroup.rotation.y += (e.clientX - lastX) * 0.01;
         contentGroup.rotation.x += (e.clientY - lastY) * 0.01;
         lastX = e.clientX;
         lastY = e.clientY;
