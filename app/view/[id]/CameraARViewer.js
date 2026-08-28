@@ -60,6 +60,11 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
         // separate DOM elements directly into document.body, outside React's
         // control, so React never cleans them up on unmount/exit. Disabling
         // all three prevents that DOM injection entirely.
+        // Note: this only suppresses the modal/overlay elements - MindAR's
+        // internal UI class still unconditionally injects a <style> tag into
+        // document.head on every construction, regardless of these options.
+        // That's never removed either, so it's a second, separate (much
+        // smaller) leak in the same library.
         uiLoading: "no",
         uiScanning: "no",
         uiError: "no",
@@ -154,7 +159,13 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       // Note: MindARThree's constructor registers a window 'resize'
       // listener with no public way to remove it - this is a real,
       // unfixable leak inside the mind-ar library itself (confirmed by
-      // reading its source), not something addressable from here.
+      // reading its source), not something addressable from here. Worse,
+      // that listener's resize() handler calls this.controller.getProjection
+      // Matrix() with no null-guard, and this.controller is only assigned
+      // once the camera successfully starts (inside _startAR()) - so a
+      // resize event firing while the camera hasn't started yet (permission
+      // denied, dialog still up, or any other pre-start failure) throws an
+      // uncaught TypeError. No clean workaround from here either.
     };
   }, [glbUrl, shape, arTargetUrl]);
 
