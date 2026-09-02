@@ -23,7 +23,10 @@ export default function ViewerClient({ item }) {
           <ModelCanvas
             glbUrl={item.glbUrl}
             mode={showWireframe ? "edges" : "solid"}
-            onModelInfo={({ hasEdges }) => setHasEdges(hasEdges)}
+            onModelInfo={({ hasEdges }) => {
+              setHasEdges(hasEdges);
+              if (!hasEdges) setShowWireframe(false);
+            }}
           />
         )}
       </div>

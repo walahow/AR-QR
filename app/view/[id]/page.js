@@ -8,5 +8,5 @@ export default async function ViewPage({ params }) {
   if (!item) {
     notFound();
   }
-  return <ViewerClient item={item} />;
+  return <ViewerClient key={item.id} item={item} />;
 }
