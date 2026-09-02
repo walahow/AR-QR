@@ -3,24 +3,26 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { buildPrimitiveParams, isValidShape } from "@/lib/wireframePrimitive";
-import { createGeometryFromParams } from "./geometryFromParams";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { buildModelParts } from "@/lib/buildModelParts";
+import { disposeObject3D } from "@/lib/disposeObject3D";
 import { PHYSICAL_QR_SIZE_METERS } from "@/lib/arConfig";
 import { withTimeout } from "@/lib/withTimeout";
 import ModeSwitch from "./ModeSwitch";
 
-export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
+export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
   const containerRef = useRef(null);
   const [showWireframe, setShowWireframe] = useState(false);
+  const [hasEdges, setHasEdges] = useState(true);
   const [status, setStatus] = useState("starting"); // starting | scanning | tracking | error | target-error
   const showWireframeRef = useRef(showWireframe);
-  const shadedRef = useRef(null);
-  const wireframeRef = useRef(null);
+  const solidRef = useRef(null);
+  const edgesRef = useRef(null);
 
   useEffect(() => {
     showWireframeRef.current = showWireframe;
-    if (shadedRef.current) shadedRef.current.visible = !showWireframe;
-    if (wireframeRef.current) wireframeRef.current.visible = showWireframe;
+    if (solidRef.current) solidRef.current.visible = !showWireframe;
+    if (edgesRef.current) edgesRef.current.visible = showWireframe;
   }, [showWireframe]);
 
   useEffect(() => {
@@ -29,25 +31,9 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
     let disposed = false;
     let mindarThree = null;
     let removeDragHandlers = null;
-
-    function disposeMaterial(material) {
-      if (!material) return;
-      Object.values(material).forEach((value) => {
-        if (value && typeof value.dispose === "function") {
-          value.dispose();
-        }
-      });
-      material.dispose();
-    }
-
-    function disposeObject3D(object) {
-      object.traverse((child) => {
-        if (!child.isMesh) return;
-        child.geometry?.dispose();
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach(disposeMaterial);
-      });
-    }
+    let removeResizeHandler = null;
+    let lineMaterial = null;
+    let root = null;
 
     (async () => {
       const { MindARThree } = await import("mind-ar/dist/mindar-image-three.prod.js");
@@ -76,7 +62,7 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       // Unlike <model-viewer> (which lights the scene internally), MindAR's
       // scene starts with zero lights. The loaded glTF's real materials
       // (typically MeshStandardMaterial) render solid black without any -
-      // the wireframe mode doesn't need this since MeshBasicMaterial is unlit.
+      // the wireframe mode doesn't need this since the edge lines are unlit.
       scene.add(new THREE.AmbientLight(0xffffff, 1));
       const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
       directionalLight.position.set(0.5, 1, 0.5);
@@ -94,6 +80,13 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       // the marker's real printed width, not multiplying by it.
       contentGroup.scale.setScalar(1 / PHYSICAL_QR_SIZE_METERS);
       anchor.group.add(contentGroup);
+
+      // Shared by every outline line the loaded model's "Edges" object
+      // produces (see buildModelParts). LineMaterial renders thick lines in
+      // screen-space pixels, so its `resolution` uniform has to track the
+      // canvas size - both now and on every resize below.
+      lineMaterial = new LineMaterial({ color: 0x00ff88, linewidth: 2 });
+      lineMaterial.resolution.set(container.clientWidth, container.clientHeight);
 
       // Let the user spin the placed object with a drag, since - unlike the
       // plain model-viewer mode - the camera here is the real phone camera
@@ -131,6 +124,12 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
         window.removeEventListener("pointerup", onPointerUp);
       };
 
+      const onResize = () => {
+        lineMaterial.resolution.set(container.clientWidth, container.clientHeight);
+      };
+      window.addEventListener("resize", onResize);
+      removeResizeHandler = () => window.removeEventListener("resize", onResize);
+
       anchor.onTargetFound = () => {
         if (!disposed) setStatus("tracking");
       };
@@ -142,38 +141,16 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       loader.load(glbUrl, (gltf) => {
         if (disposed) return;
 
-        const shaded = gltf.scene;
+        root = gltf.scene;
+        const { solid, edges } = buildModelParts(root, lineMaterial);
+        solidRef.current = solid;
+        edgesRef.current = edges;
+        setHasEdges(Boolean(edges));
 
-        // Measure and re-center BEFORE parenting under contentGroup: once
-        // added, Box3.setFromObject would include contentGroup/anchor.group's
-        // matrices (anchor.group's isn't meaningful yet - it's only ever
-        // written by the tracker's per-frame onUpdate, which hasn't run at
-        // load time), so the box has to be taken in the model's own local
-        // space first. Most GLBs aren't authored with their origin at their
-        // bounding-box center, so without this the model renders offset from
-        // the marker instead of centered on it.
-        const box = new THREE.Box3().setFromObject(shaded);
-        const center = box.getCenter(new THREE.Vector3());
-        shaded.position.sub(center);
+        if (solid) solid.visible = !showWireframeRef.current;
+        if (edges) edges.visible = showWireframeRef.current;
 
-        shaded.visible = !showWireframeRef.current;
-        shadedRef.current = shaded;
-        contentGroup.add(shaded);
-
-        const size = box.getSize(new THREE.Vector3());
-        const resolvedShape = isValidShape(shape) ? shape : "cube";
-        const params = buildPrimitiveParams(resolvedShape, {
-          width: size.x || 0.01,
-          height: size.y || 0.01,
-          depth: size.z || 0.01,
-        });
-        const wireframe = new THREE.Mesh(
-          createGeometryFromParams(params),
-          new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true })
-        );
-        wireframe.visible = showWireframeRef.current;
-        wireframeRef.current = wireframe;
-        contentGroup.add(wireframe);
+        contentGroup.add(root);
       });
 
       try {
@@ -226,11 +203,9 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
     return () => {
       disposed = true;
       removeDragHandlers?.();
-      if (shadedRef.current) disposeObject3D(shadedRef.current);
-      if (wireframeRef.current) {
-        wireframeRef.current.geometry?.dispose();
-        disposeMaterial(wireframeRef.current.material);
-      }
+      removeResizeHandler?.();
+      if (root) disposeObject3D(root);
+      lineMaterial?.dispose();
       if (mindarThree) {
         mindarThree.renderer?.setAnimationLoop(null);
         mindarThree.renderer?.dispose();
@@ -255,7 +230,7 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
       // denied, dialog still up, or any other pre-start failure) throws an
       // uncaught TypeError. No clean workaround from here either.
     };
-  }, [glbUrl, shape, arTargetUrl]);
+  }, [glbUrl, arTargetUrl]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", background: "#111" }}>
@@ -277,7 +252,12 @@ export default function CameraARViewer({ glbUrl, shape, arTargetUrl, onExit }) {
           onChange={(v) => setShowWireframe(v === "wireframe")}
           options={[
             { value: "normal", label: "Normal" },
-            { value: "wireframe", label: "Wireframe" },
+            {
+              value: "wireframe",
+              label: "Wireframe",
+              disabled: !hasEdges,
+              disabledReason: "This item's model doesn't have separate Solid/Edges objects",
+            },
           ]}
         />
         <button type="button" onClick={onExit}>
