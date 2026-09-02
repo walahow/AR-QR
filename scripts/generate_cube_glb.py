@@ -50,8 +50,8 @@ def main():
     gltf = {
         "asset": {"version": "2.0", "generator": "ar-qr placeholder cube generator"},
         "scene": 0,
-        "scenes": [{"nodes": [0]}],
-        "nodes": [{"mesh": 0}],
+        "scenes": [{"nodes": [0, 1]}],
+        "nodes": [{"name": "Solid", "mesh": 0}, {"name": "Edges", "mesh": 0}],
         "meshes": [{
             "primitives": [{
                 "attributes": {"POSITION": 0, "NORMAL": 1},
