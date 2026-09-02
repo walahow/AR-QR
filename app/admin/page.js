@@ -1,13 +1,13 @@
+// app/admin/page.js
 "use client";
 
 import { useEffect, useState } from "react";
-import { SHAPES } from "@/lib/wireframePrimitive";
 import { compileAndUploadTarget } from "./compileTarget";
+import { validateModelHasSolidAndEdges } from "./validateModel";
 
 export default function AdminPage() {
   const [items, setItems] = useState([]);
   const [name, setName] = useState("");
-  const [shape, setShape] = useState(SHAPES[0]);
   const [glbFile, setGlbFile] = useState(null);
   const [usdzFile, setUsdzFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -38,18 +38,23 @@ export default function AdminPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!name || !glbFile || !usdzFile) {
-      setError("Name, .glb file, and .usdz file are all required.");
+    if (!name || !glbFile) {
+      setError("Name and a .glb file are both required.");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
+      const { hasSolid, hasEdges } = await validateModelHasSolidAndEdges(glbFile);
+      if (!hasSolid || !hasEdges) {
+        setError('The .glb file must contain two top-level objects named "Solid" and "Edges".');
+        return;
+      }
+
       const formData = new FormData();
       formData.append("name", name);
-      formData.append("shape", shape);
       formData.append("glb", glbFile);
-      formData.append("usdz", usdzFile);
+      if (usdzFile) formData.append("usdz", usdzFile);
       const res = await fetch("/api/items", { method: "POST", body: formData });
       if (!res.ok) {
         const body = await res.json();
@@ -58,7 +63,6 @@ export default function AdminPage() {
       const created = await res.json();
       runCompile(created.id);
       setName("");
-      setShape(SHAPES[0]);
       setGlbFile(null);
       setUsdzFile(null);
       await loadItems();
@@ -108,21 +112,7 @@ export default function AdminPage() {
           />
         </label>
         <label style={{ display: "block", marginBottom: 12 }}>
-          Shape (for wireframe mode)
-          <select
-            value={shape}
-            onChange={(e) => setShape(e.target.value)}
-            style={{ display: "block", width: "100%", marginTop: 4, padding: 8, border: "2px solid #000" }}
-          >
-            {SHAPES.map((s) => (
-              <option key={s} value={s}>
-                {s[0].toUpperCase() + s.slice(1)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "block", marginBottom: 12 }}>
-          .glb file
+          .glb file (must contain "Solid" and "Edges" objects)
           <input
             type="file"
             accept=".glb"
@@ -131,7 +121,7 @@ export default function AdminPage() {
           />
         </label>
         <label style={{ display: "block", marginBottom: 12 }}>
-          .usdz file
+          .usdz file (optional)
           <input
             type="file"
             accept=".usdz"
@@ -152,7 +142,6 @@ export default function AdminPage() {
         <thead>
           <tr>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>Name</th>
-            <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>Shape</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>QR</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}>AR Target</th>
             <th style={{ borderBottom: "2px solid #000", textAlign: "left", padding: 8 }}></th>
@@ -162,7 +151,6 @@ export default function AdminPage() {
           {items.map((item) => (
             <tr key={item.id}>
               <td style={{ padding: 8 }}>{item.name}</td>
-              <td style={{ padding: 8 }}>{item.shape ?? "—"}</td>
               <td style={{ padding: 8 }}>
                 <a href={`/api/items/${item.id}/qr`} target="_blank" rel="noreferrer">
                   View QR
