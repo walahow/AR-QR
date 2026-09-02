@@ -6,7 +6,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { buildModelParts } from "@/lib/buildModelParts";
 import { disposeObject3D } from "@/lib/disposeObject3D";
-import { PHYSICAL_QR_SIZE_METERS } from "@/lib/arConfig";
+import { PHYSICAL_QR_SIZE_METERS, AR_MODEL_SIZE_MARKER_WIDTHS } from "@/lib/arConfig";
 import { withTimeout } from "@/lib/withTimeout";
 import ModeSwitch from "./ModeSwitch";
 
@@ -142,7 +142,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (disposed) return;
 
         root = gltf.scene;
-        const { solid, edges } = buildModelParts(root, lineMaterial);
+        const { solid, edges, size } = buildModelParts(root, lineMaterial);
         solidRef.current = solid;
         edgesRef.current = edges;
         setHasEdges(Boolean(edges));
@@ -157,7 +157,23 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (solid) solid.visible = !showWireframeRef.current;
         if (edges) edges.visible = showWireframeRef.current;
 
-        contentGroup.add(root);
+        // Most uploaded GLBs aren't authored in accurate real-world
+        // meters, so trusting the model's own scale (as contentGroup's
+        // marker-width transform above does) would make different items
+        // appear wildly, inconsistently sized in AR. This wraps the
+        // already-recentered root in its own group so its largest
+        // dimension always maps to a fixed number of marker-widths -
+        // applying this as root.scale directly instead would combine
+        // incorrectly with buildModelParts's recentering translation
+        // (root.position is set in root's own unscaled units), leaving
+        // the model off-center once scaled.
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const normalizedGroup = new THREE.Group();
+        normalizedGroup.scale.setScalar(
+          (AR_MODEL_SIZE_MARKER_WIDTHS * PHYSICAL_QR_SIZE_METERS) / maxDim
+        );
+        normalizedGroup.add(root);
+        contentGroup.add(normalizedGroup);
       });
 
       try {
