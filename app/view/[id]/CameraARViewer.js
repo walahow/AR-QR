@@ -146,6 +146,13 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         solidRef.current = solid;
         edgesRef.current = edges;
         setHasEdges(Boolean(edges));
+        // A user can tap "Wireframe" during the (slow, async) AR init window
+        // before this load callback runs. If this model turns out to have no
+        // separate Edges object, force showWireframe back off here too - not
+        // just disable the button - so we never end up with the solid hidden
+        // (because showWireframeRef.current is stale-true) and nothing to
+        // show in its place. Same fix already applied in ViewerClient.js.
+        if (!edges) setShowWireframe(false);
 
         if (solid) solid.visible = !showWireframeRef.current;
         if (edges) edges.visible = showWireframeRef.current;
