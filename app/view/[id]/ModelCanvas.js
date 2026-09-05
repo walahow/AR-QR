@@ -157,7 +157,7 @@ const ModelCanvas = forwardRef(function ModelCanvas({ glbUrl, mode, onModelInfo 
       if (disposed) return;
 
       root = gltf.scene;
-      const { solid, edges, detail } = buildModelParts(root, lineMaterial);
+      const { solid, edges, detail } = buildModelParts(root, lineMaterial, gltf.animations);
       solidRef.current = solid;
       edgesRef.current = edges;
       detailRef.current = detail;

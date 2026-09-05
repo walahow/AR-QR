@@ -232,7 +232,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (disposed) return;
 
         root = gltf.scene;
-        const { solid, edges, detail, size } = buildModelParts(root, lineMaterial);
+        const { solid, edges, detail, size } = buildModelParts(root, lineMaterial, gltf.animations);
         solidRef.current = solid;
         edgesRef.current = edges;
         detailRef.current = detail;
