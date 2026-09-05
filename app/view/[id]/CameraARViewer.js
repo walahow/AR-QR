@@ -3,27 +3,61 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { buildModelParts } from "@/lib/buildModelParts";
+import { findClipForObject } from "@/lib/findClipForObject";
 import { disposeObject3D } from "@/lib/disposeObject3D";
 import { PHYSICAL_QR_SIZE_METERS, AR_MODEL_SIZE_MARKER_WIDTHS } from "@/lib/arConfig";
 import { withTimeout } from "@/lib/withTimeout";
 import ModeSwitch from "./ModeSwitch";
 
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
 export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
   const containerRef = useRef(null);
   const [showWireframe, setShowWireframe] = useState(false);
   const [hasEdges, setHasEdges] = useState(true);
+  const [hasEdges2, setHasEdges2] = useState(false);
   const [status, setStatus] = useState("starting"); // starting | scanning | tracking | error | target-error
   const showWireframeRef = useRef(showWireframe);
   const solidRef = useRef(null);
   const edgesRef = useRef(null);
+  const edges2Ref = useRef(null);
+  const mixerRef = useRef(null);
+  const edges2ClipRef = useRef(null);
+  const edgesAnimationRef = useRef({ isAnimating: false, startTime: 0, targetScale: 0 });
 
   useEffect(() => {
     showWireframeRef.current = showWireframe;
     if (solidRef.current) solidRef.current.visible = !showWireframe;
-    if (edgesRef.current) edgesRef.current.visible = showWireframe;
+    if (edgesRef.current) {
+      edgesRef.current.visible = showWireframe;
+      if (showWireframe) {
+        edgesAnimationRef.current = { isAnimating: true, startTime: Date.now(), targetScale: 1 };
+      }
+    }
+    if (!showWireframe && edges2Ref.current) {
+      // Leaving wireframe mode resets the detail reveal, so it plays in
+      // full again next time wireframe mode is entered.
+      edges2Ref.current.visible = false;
+      mixerRef.current?.stopAllAction();
+    }
   }, [showWireframe]);
+
+  function revealDetail() {
+    const edges2 = edges2Ref.current;
+    if (!edges2) return;
+    edges2.visible = true;
+    const clip = edges2ClipRef.current;
+    if (clip && mixerRef.current) {
+      const action = mixerRef.current.clipAction(clip);
+      action.reset();
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.play();
+    }
+  }
 
   useEffect(() => {
     const container = containerRef.current;
@@ -32,7 +66,6 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
     let mindarThree = null;
     let removeDragHandlers = null;
     let removeResizeHandler = null;
-    let lineMaterial = null;
     let root = null;
 
     (async () => {
@@ -81,13 +114,6 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       contentGroup.scale.setScalar(1 / PHYSICAL_QR_SIZE_METERS);
       anchor.group.add(contentGroup);
 
-      // Shared by every outline line the loaded model's "Edges" object
-      // produces (see buildModelParts). LineMaterial renders thick lines in
-      // screen-space pixels, so its `resolution` uniform has to track the
-      // canvas size - both now and on every resize below.
-      lineMaterial = new LineMaterial({ color: 0x00ff88, linewidth: 2 });
-      lineMaterial.resolution.set(container.clientWidth, container.clientHeight);
-
       // Let the user spin the placed object with a drag, since - unlike the
       // plain model-viewer mode - the camera here is the real phone camera
       // driven by MindAR's tracking, so there's no camera to orbit around it
@@ -125,7 +151,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       };
 
       const onResize = () => {
-        lineMaterial.resolution.set(container.clientWidth, container.clientHeight);
+        // Resize handling for camera if needed
       };
       window.addEventListener("resize", onResize);
       removeResizeHandler = () => window.removeEventListener("resize", onResize);
@@ -142,10 +168,12 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (disposed) return;
 
         root = gltf.scene;
-        const { solid, edges, size } = buildModelParts(root, lineMaterial);
+        const { solid, edges, edges2, size } = buildModelParts(root);
         solidRef.current = solid;
         edgesRef.current = edges;
+        edges2Ref.current = edges2;
         setHasEdges(Boolean(edges));
+        setHasEdges2(Boolean(edges2));
         // A user can tap "Wireframe" during the (slow, async) AR init window
         // before this load callback runs. If this model turns out to have no
         // separate Edges object, force showWireframe back off here too - not
@@ -155,7 +183,16 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (!edges) setShowWireframe(false);
 
         if (solid) solid.visible = !showWireframeRef.current;
-        if (edges) edges.visible = showWireframeRef.current;
+        if (edges) {
+          edges.visible = showWireframeRef.current;
+          edges.scale.set(0.1, 0.1, 0.1);
+          if (showWireframeRef.current) {
+            edgesAnimationRef.current = { isAnimating: true, startTime: Date.now(), targetScale: 1 };
+          }
+        }
+
+        mixerRef.current = new THREE.AnimationMixer(root);
+        edges2ClipRef.current = findClipForObject(gltf.animations, edges2);
 
         // Most uploaded GLBs aren't authored in accurate real-world
         // meters, so trusting the model's own scale (as contentGroup's
@@ -218,7 +255,27 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         return;
       }
       setStatus("scanning");
-      renderer.setAnimationLoop(() => {
+      let lastTime = null;
+      renderer.setAnimationLoop((time) => {
+        if (lastTime !== null) {
+          mixerRef.current?.update((time - lastTime) / 1000);
+        }
+        lastTime = time;
+
+        // Animate edges expansion when entering wireframe mode
+        if (edgesAnimationRef.current.isAnimating && edgesRef.current) {
+          const elapsed = Date.now() - edgesAnimationRef.current.startTime;
+          const duration = 500; // 500ms animation
+          const progress = Math.min(elapsed / duration, 1);
+          const eased = easeOutCubic(progress);
+          const currentScale = 0.1 + eased * (edgesAnimationRef.current.targetScale - 0.1);
+          edgesRef.current.scale.set(currentScale, currentScale, currentScale);
+
+          if (progress >= 1) {
+            edgesAnimationRef.current.isAnimating = false;
+          }
+        }
+
         renderer.render(scene, camera);
       });
     })();
@@ -228,7 +285,6 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       removeDragHandlers?.();
       removeResizeHandler?.();
       if (root) disposeObject3D(root);
-      lineMaterial?.dispose();
       if (mindarThree) {
         mindarThree.renderer?.setAnimationLoop(null);
         mindarThree.renderer?.dispose();
@@ -270,19 +326,31 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative", zIndex: 0, overflow: "hidden" }} />
 
       <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <ModeSwitch
-          value={showWireframe ? "wireframe" : "normal"}
-          onChange={(v) => setShowWireframe(v === "wireframe")}
-          options={[
-            { value: "normal", label: "Normal" },
-            {
-              value: "wireframe",
-              label: "Wireframe",
-              disabled: !hasEdges,
-              disabledReason: "This item's model doesn't have separate Solid/Edges objects",
-            },
-          ]}
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <ModeSwitch
+            value={showWireframe ? "wireframe" : "normal"}
+            onChange={(v) => setShowWireframe(v === "wireframe")}
+            options={[
+              { value: "normal", label: "Normal" },
+              {
+                value: "wireframe",
+                label: "Wireframe",
+                disabled: !hasEdges,
+                disabledReason: "This item's model doesn't have separate Solid/Edges objects",
+              },
+            ]}
+          />
+          {showWireframe && (
+            <button
+              type="button"
+              onClick={revealDetail}
+              disabled={!hasEdges2}
+              title={hasEdges2 ? undefined : "This item has no detail view authored"}
+            >
+              Reveal Detail
+            </button>
+          )}
+        </div>
         <button type="button" onClick={onExit}>
           Exit AR
         </button>

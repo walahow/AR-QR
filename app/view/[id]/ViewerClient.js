@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import ModelCanvas from "./ModelCanvas";
 import ModeSwitch from "./ModeSwitch";
 import CameraARViewer from "./CameraARViewer";
@@ -9,6 +9,8 @@ export default function ViewerClient({ item }) {
   const [showWireframe, setShowWireframe] = useState(false);
   const [cameraARActive, setCameraARActive] = useState(false);
   const [hasEdges, setHasEdges] = useState(true);
+  const [hasEdges2, setHasEdges2] = useState(false);
+  const modelCanvasRef = useRef(null);
 
   return (
     <div className="page" style={{ padding: 0, gap: 0 }}>
@@ -21,10 +23,12 @@ export default function ViewerClient({ item }) {
           />
         ) : (
           <ModelCanvas
+            ref={modelCanvasRef}
             glbUrl={item.glbUrl}
             mode={showWireframe ? "edges" : "solid"}
-            onModelInfo={({ hasEdges }) => {
+            onModelInfo={({ hasEdges, hasEdges2 }) => {
               setHasEdges(hasEdges);
+              setHasEdges2(hasEdges2);
               if (!hasEdges) setShowWireframe(false);
             }}
           />
@@ -34,19 +38,31 @@ export default function ViewerClient({ item }) {
         {!cameraARActive && (
           <>
             <h2 style={{ margin: 0 }}>{item.name}</h2>
-            <ModeSwitch
-              value={showWireframe ? "wireframe" : "normal"}
-              onChange={(v) => setShowWireframe(v === "wireframe")}
-              options={[
-                { value: "normal", label: "Normal" },
-                {
-                  value: "wireframe",
-                  label: "Wireframe",
-                  disabled: !hasEdges,
-                  disabledReason: "This item's model doesn't have separate Solid/Edges objects",
-                },
-              ]}
-            />
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <ModeSwitch
+                value={showWireframe ? "wireframe" : "normal"}
+                onChange={(v) => setShowWireframe(v === "wireframe")}
+                options={[
+                  { value: "normal", label: "Normal" },
+                  {
+                    value: "wireframe",
+                    label: "Wireframe",
+                    disabled: !hasEdges,
+                    disabledReason: "This item's model doesn't have separate Solid/Edges objects",
+                  },
+                ]}
+              />
+              {showWireframe && (
+                <button
+                  type="button"
+                  onClick={() => modelCanvasRef.current?.revealDetail()}
+                  disabled={!hasEdges2}
+                  title={hasEdges2 ? undefined : "This item has no detail view authored"}
+                >
+                  Reveal Detail
+                </button>
+              )}
+            </div>
             <p style={{ margin: 0 }}>
               {showWireframe
                 ? "Drag to rotate the shape."

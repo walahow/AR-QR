@@ -51,22 +51,41 @@ def main():
         "asset": {"version": "2.0", "generator": "ar-qr placeholder cube generator"},
         "scene": 0,
         "scenes": [{"nodes": [0, 1]}],
-        "nodes": [{"name": "Solid", "mesh": 0}, {"name": "Edges", "mesh": 0}],
-        "meshes": [{
-            "primitives": [{
-                "attributes": {"POSITION": 0, "NORMAL": 1},
-                "indices": 2,
-                "material": 0,
-            }]
-        }],
-        "materials": [{
-            "name": "PlaceholderOrange",
-            "pbrMetallicRoughness": {
-                "baseColorFactor": [0.85, 0.35, 0.1, 1.0],
-                "metallicFactor": 0.1,
-                "roughnessFactor": 0.6,
+        "nodes": [{"name": "Solid", "mesh": 0}, {"name": "Edges", "mesh": 1}],
+        "meshes": [
+            {
+                "primitives": [{
+                    "attributes": {"POSITION": 0, "NORMAL": 1},
+                    "indices": 2,
+                    "material": 0,
+                }]
             },
-        }],
+            {
+                "primitives": [{
+                    "attributes": {"POSITION": 0, "NORMAL": 1},
+                    "indices": 2,
+                    "material": 1,
+                }]
+            }
+        ],
+        "materials": [
+            {
+                "name": "PlaceholderOrange",
+                "pbrMetallicRoughness": {
+                    "baseColorFactor": [0.85, 0.35, 0.1, 1.0],
+                    "metallicFactor": 0.1,
+                    "roughnessFactor": 0.6,
+                },
+            },
+            {
+                "name": "PlaceholderGreen",
+                "pbrMetallicRoughness": {
+                    "baseColorFactor": [0.1, 0.85, 0.35, 1.0],
+                    "metallicFactor": 0.1,
+                    "roughnessFactor": 0.6,
+                },
+            }
+        ],
         "accessors": [
             {
                 "bufferView": 0, "componentType": 5126, "count": len(positions),

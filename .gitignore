@@ -8,3 +8,7 @@ data/
 public/uploads/
 .env*.local
 .superpowers/
+
+.vercel
+.env*
+docs/handoff-wireframe-viewer.md
