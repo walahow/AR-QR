@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { buildModelParts } from "@/lib/buildModelParts";
 import { findClipsForObject } from "@/lib/findClipsForObject";
 import { disposeObject3D } from "@/lib/disposeObject3D";
@@ -117,10 +118,18 @@ const ModelCanvas = forwardRef(function ModelCanvas({ glbUrl, mode, onModelInfo 
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111111);
-    scene.add(new THREE.AmbientLight(0xffffff, 1));
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight.position.set(0.5, 1, 0.5);
-    scene.add(directionalLight);
+    // A single directional light left every face angled away from it
+    // looking flat/dark - especially the double-sided detail planes, which
+    // can face any direction once unfolded. A soft sky/ground hemisphere
+    // light plus a key + fill directional pair keeps every surface readably
+    // lit from whatever angle it ends up facing.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a3a, 1.1));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    keyLight.position.set(1, 1.5, 1);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    fillLight.position.set(-1, 0.5, -1);
+    scene.add(fillLight);
 
     const camera = new THREE.PerspectiveCamera(
       45,
@@ -137,12 +146,18 @@ const ModelCanvas = forwardRef(function ModelCanvas({ glbUrl, mode, onModelInfo 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
+    // Bright, thick outline overlaid on every wireframe-mode face (see
+    // buildModelParts) so individual planes/facets stay clearly delineated
+    // from each other, not just flat-shaded shapes.
+    const lineMaterial = new LineMaterial({ color: 0x00ff88, linewidth: 3 });
+    lineMaterial.resolution.set(container.clientWidth, container.clientHeight);
+
     const loader = new GLTFLoader();
     loader.load(glbUrl, (gltf) => {
       if (disposed) return;
 
       root = gltf.scene;
-      const { solid, edges, detail } = buildModelParts(root);
+      const { solid, edges, detail } = buildModelParts(root, lineMaterial);
       solidRef.current = solid;
       edgesRef.current = edges;
       detailRef.current = detail;
@@ -153,7 +168,11 @@ const ModelCanvas = forwardRef(function ModelCanvas({ glbUrl, mode, onModelInfo 
       mixerRef.current = new THREE.AnimationMixer(root);
       detailClipsRef.current = findClipsForObject(gltf.animations, detail);
 
-      if (modeRef.current === "edges") enterWireframeMode();
+      if (modeRef.current === "edges") {
+        enterWireframeMode();
+      } else {
+        exitWireframeMode();
+      }
 
       scene.add(root);
 
@@ -198,6 +217,7 @@ const ModelCanvas = forwardRef(function ModelCanvas({ glbUrl, mode, onModelInfo 
       camera.aspect = clientWidth / clientHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(clientWidth, clientHeight);
+      lineMaterial.resolution.set(clientWidth, clientHeight);
     }
     window.addEventListener("resize", handleResize);
 
@@ -206,6 +226,7 @@ const ModelCanvas = forwardRef(function ModelCanvas({ glbUrl, mode, onModelInfo 
       cancelAnimationFrame(frameId);
       window.removeEventListener("resize", handleResize);
       controls.dispose();
+      lineMaterial.dispose();
       if (root) disposeObject3D(root);
       renderer.dispose();
       container.removeChild(renderer.domElement);

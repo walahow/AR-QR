@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { buildModelParts } from "@/lib/buildModelParts";
 import { findClipsForObject } from "@/lib/findClipsForObject";
 import { disposeObject3D } from "@/lib/disposeObject3D";
@@ -112,6 +113,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
     let mindarThree = null;
     let removeDragHandlers = null;
     let removeResizeHandler = null;
+    let lineMaterial = null;
     let root = null;
 
     (async () => {
@@ -140,12 +142,19 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
 
       // Unlike <model-viewer> (which lights the scene internally), MindAR's
       // scene starts with zero lights. The loaded glTF's real materials
-      // (typically MeshStandardMaterial) render solid black without any -
-      // the wireframe mode doesn't need this since the edge lines are unlit.
-      scene.add(new THREE.AmbientLight(0xffffff, 1));
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
-      directionalLight.position.set(0.5, 1, 0.5);
-      scene.add(directionalLight);
+      // (typically MeshStandardMaterial) render solid black without any. A
+      // single directional light also left faces angled away from it
+      // looking flat/dark - especially the double-sided detail planes,
+      // which can face any direction once unfolded - so this uses a soft
+      // sky/ground hemisphere light plus a key + fill directional pair
+      // instead, matching the plain preview's lighting.
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a3a, 1.1));
+      const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      keyLight.position.set(1, 1.5, 1);
+      scene.add(keyLight);
+      const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      fillLight.position.set(-1, 0.5, -1);
+      scene.add(fillLight);
 
       const anchor = mindarThree.addAnchor(0);
 
@@ -159,6 +168,15 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       // the marker's real printed width, not multiplying by it.
       contentGroup.scale.setScalar(1 / PHYSICAL_QR_SIZE_METERS);
       anchor.group.add(contentGroup);
+
+      // Bright, thick outline overlaid on every wireframe-mode face (see
+      // buildModelParts) so individual planes/facets stay clearly
+      // delineated from each other, not just flat-shaded shapes.
+      // LineMaterial renders thick lines in screen-space pixels, so its
+      // `resolution` uniform has to track the canvas size - both now and
+      // on every resize below.
+      lineMaterial = new LineMaterial({ color: 0x00ff88, linewidth: 3 });
+      lineMaterial.resolution.set(container.clientWidth, container.clientHeight);
 
       // Let the user spin the placed object with a drag, since - unlike the
       // plain model-viewer mode - the camera here is the real phone camera
@@ -197,7 +215,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       };
 
       const onResize = () => {
-        // Resize handling for camera if needed
+        lineMaterial.resolution.set(container.clientWidth, container.clientHeight);
       };
       window.addEventListener("resize", onResize);
       removeResizeHandler = () => window.removeEventListener("resize", onResize);
@@ -214,7 +232,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (disposed) return;
 
         root = gltf.scene;
-        const { solid, edges, detail, size } = buildModelParts(root);
+        const { solid, edges, detail, size } = buildModelParts(root, lineMaterial);
         solidRef.current = solid;
         edgesRef.current = edges;
         detailRef.current = detail;
@@ -233,7 +251,11 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         mixerRef.current = new THREE.AnimationMixer(root);
         detailClipsRef.current = findClipsForObject(gltf.animations, detail);
 
-        if (showWireframeRef.current) enterWireframeMode();
+        if (showWireframeRef.current) {
+          enterWireframeMode();
+        } else {
+          exitWireframeMode();
+        }
 
         // Most uploaded GLBs aren't authored in accurate real-world
         // meters, so trusting the model's own scale (as contentGroup's
@@ -328,6 +350,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       removeDragHandlers?.();
       removeResizeHandler?.();
       if (root) disposeObject3D(root);
+      lineMaterial?.dispose();
       if (mindarThree) {
         mindarThree.renderer?.setAnimationLoop(null);
         mindarThree.renderer?.dispose();
