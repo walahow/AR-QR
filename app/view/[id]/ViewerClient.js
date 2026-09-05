@@ -9,7 +9,7 @@ export default function ViewerClient({ item }) {
   const [showWireframe, setShowWireframe] = useState(false);
   const [cameraARActive, setCameraARActive] = useState(false);
   const [hasEdges, setHasEdges] = useState(true);
-  const [hasDetail, setHasDetail] = useState(false);
+  const [hasDetailAnimation, setHasDetailAnimation] = useState(false);
   const modelCanvasRef = useRef(null);
 
   return (
@@ -26,9 +26,9 @@ export default function ViewerClient({ item }) {
             ref={modelCanvasRef}
             glbUrl={item.glbUrl}
             mode={showWireframe ? "edges" : "solid"}
-            onModelInfo={({ hasEdges, hasDetail }) => {
+            onModelInfo={({ hasEdges, hasDetailAnimation }) => {
               setHasEdges(hasEdges);
-              setHasDetail(hasDetail);
+              setHasDetailAnimation(hasDetailAnimation);
               if (!hasEdges) setShowWireframe(false);
             }}
           />
@@ -52,13 +52,8 @@ export default function ViewerClient({ item }) {
                   },
                 ]}
               />
-              {showWireframe && (
-                <button
-                  type="button"
-                  onClick={() => modelCanvasRef.current?.revealDetail()}
-                  disabled={!hasDetail}
-                  title={hasDetail ? undefined : "This item has no detail view authored"}
-                >
+              {showWireframe && hasDetailAnimation && (
+                <button type="button" onClick={() => modelCanvasRef.current?.revealDetail()}>
                   Reveal Detail
                 </button>
               )}

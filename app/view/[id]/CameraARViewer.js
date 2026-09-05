@@ -19,7 +19,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
   const containerRef = useRef(null);
   const [showWireframe, setShowWireframe] = useState(false);
   const [hasEdges, setHasEdges] = useState(true);
-  const [hasDetail, setHasDetail] = useState(false);
+  const [hasDetailAnimation, setHasDetailAnimation] = useState(false);
   const [status, setStatus] = useState("starting"); // starting | scanning | tracking | error | target-error
   const showWireframeRef = useRef(showWireframe);
   const solidRef = useRef(null);
@@ -28,10 +28,10 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
   const mixerRef = useRef(null);
   const detailClipsRef = useRef([]);
   const detailActionsRef = useRef([]);
-  // Whichever object is shown first on entering wireframe mode - "Edges",
-  // or, when the detail group has authored animation(s), the detail group
-  // itself (frozen on its first frame). Drives the opening scale-in
-  // animation below.
+  // Whichever object is shown first on entering wireframe mode - the
+  // detail group, if the model has one (frozen on its first frame if it
+  // has an authored animation), otherwise "Edges". Drives the opening
+  // scale-in animation below.
   const wireframeVisualRef = useRef(null);
   const edgesAnimationRef = useRef({ isAnimating: false, startTime: 0, targetScale: 0 });
 
@@ -40,27 +40,31 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
     const detail = detailRef.current;
     const clips = detailClipsRef.current;
 
-    if (clips.length > 0 && detail && mixerRef.current) {
-      // The detail group has at least one authored animation (often
-      // several separately-animated pieces): it replaces Edges entirely,
-      // shown paused on its first frame until "Reveal Detail" plays it
-      // forward - Edges itself never shows for this model.
+    if (detail) {
+      // Any detail content - animated or static - replaces Edges entirely;
+      // Edges itself never shows for a model that has one. An authored
+      // animation is shown paused on its first frame until "Reveal Detail"
+      // plays it forward; with no animation at all, the static content is
+      // simply visible immediately (nothing left to reveal on demand).
       if (edges) edges.visible = false;
       detail.visible = true;
-      const actions = clips.map((clip) => {
-        const action = mixerRef.current.clipAction(clip);
-        action.reset();
-        action.setLoop(THREE.LoopOnce, 1);
-        action.clampWhenFinished = true;
-        action.play();
-        action.paused = true;
-        return action;
-      });
-      mixerRef.current.update(0);
-      detailActionsRef.current = actions;
+      if (clips.length > 0 && mixerRef.current) {
+        const actions = clips.map((clip) => {
+          const action = mixerRef.current.clipAction(clip);
+          action.reset();
+          action.setLoop(THREE.LoopOnce, 1);
+          action.clampWhenFinished = true;
+          action.play();
+          action.paused = true;
+          return action;
+        });
+        mixerRef.current.update(0);
+        detailActionsRef.current = actions;
+      } else {
+        detailActionsRef.current = [];
+      }
       wireframeVisualRef.current = detail;
     } else {
-      if (detail) detail.visible = false;
       if (edges) edges.visible = true;
       detailActionsRef.current = [];
       wireframeVisualRef.current = edges;
@@ -92,18 +96,14 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
   }, [showWireframe]);
 
   function revealDetail() {
-    // Already frozen on their first frame (see enterWireframeMode) - this
-    // is the only thing that lets them actually play forward.
-    const actions = detailActionsRef.current;
-    if (actions.length > 0) {
-      actions.forEach((action) => {
-        action.paused = false;
-      });
-      return;
-    }
-    // No authored animation - the detail group (if present) is a static
-    // fallback, shown on demand alongside Edges.
-    if (detailRef.current) detailRef.current.visible = true;
+    // The detail group is already visible by the time this can be called
+    // (see enterWireframeMode) - unpausing its actions is the only thing
+    // that lets an authored animation actually play forward. A
+    // static-only detail group has nothing to reveal; this button isn't
+    // even shown in that case (see hasDetailAnimation below).
+    detailActionsRef.current.forEach((action) => {
+      action.paused = false;
+    });
   }
 
   useEffect(() => {
@@ -237,7 +237,6 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         edgesRef.current = edges;
         detailRef.current = detail;
         setHasEdges(Boolean(edges));
-        setHasDetail(Boolean(detail));
         // A user can tap "Wireframe" during the (slow, async) AR init window
         // before this load callback runs. If this model turns out to have no
         // separate Edges object, force showWireframe back off here too - not
@@ -250,6 +249,7 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
 
         mixerRef.current = new THREE.AnimationMixer(root);
         detailClipsRef.current = findClipsForObject(gltf.animations, detail);
+        setHasDetailAnimation(detailClipsRef.current.length > 0);
 
         if (showWireframeRef.current) {
           enterWireframeMode();
@@ -418,14 +418,9 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         for the same bottom-16 space as the status messages below, which
         only render for those other states.
       */}
-      {showWireframe && status === "tracking" && (
+      {showWireframe && status === "tracking" && hasDetailAnimation && (
         <div style={{ position: "absolute", bottom: 16, left: 16, right: 16, display: "flex", justifyContent: "center" }}>
-          <button
-            type="button"
-            onClick={revealDetail}
-            disabled={!hasDetail}
-            title={hasDetail ? undefined : "This item has no detail view authored"}
-          >
+          <button type="button" onClick={revealDetail}>
             Reveal Detail
           </button>
         </div>
