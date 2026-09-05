@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { buildModelParts } from "@/lib/buildModelParts";
-import { findClipForObject } from "@/lib/findClipForObject";
+import { findClipsForObject } from "@/lib/findClipsForObject";
 import { disposeObject3D } from "@/lib/disposeObject3D";
 import { PHYSICAL_QR_SIZE_METERS, AR_MODEL_SIZE_MARKER_WIDTHS } from "@/lib/arConfig";
 import { withTimeout } from "@/lib/withTimeout";
@@ -18,45 +18,91 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
   const containerRef = useRef(null);
   const [showWireframe, setShowWireframe] = useState(false);
   const [hasEdges, setHasEdges] = useState(true);
-  const [hasEdges2, setHasEdges2] = useState(false);
+  const [hasDetail, setHasDetail] = useState(false);
   const [status, setStatus] = useState("starting"); // starting | scanning | tracking | error | target-error
   const showWireframeRef = useRef(showWireframe);
   const solidRef = useRef(null);
   const edgesRef = useRef(null);
-  const edges2Ref = useRef(null);
+  const detailRef = useRef(null);
   const mixerRef = useRef(null);
-  const edges2ClipRef = useRef(null);
+  const detailClipsRef = useRef([]);
+  const detailActionsRef = useRef([]);
+  // Whichever object is shown first on entering wireframe mode - "Edges",
+  // or, when the detail group has authored animation(s), the detail group
+  // itself (frozen on its first frame). Drives the opening scale-in
+  // animation below.
+  const wireframeVisualRef = useRef(null);
   const edgesAnimationRef = useRef({ isAnimating: false, startTime: 0, targetScale: 0 });
+
+  function enterWireframeMode() {
+    const edges = edgesRef.current;
+    const detail = detailRef.current;
+    const clips = detailClipsRef.current;
+
+    if (clips.length > 0 && detail && mixerRef.current) {
+      // The detail group has at least one authored animation (often
+      // several separately-animated pieces): it replaces Edges entirely,
+      // shown paused on its first frame until "Reveal Detail" plays it
+      // forward - Edges itself never shows for this model.
+      if (edges) edges.visible = false;
+      detail.visible = true;
+      const actions = clips.map((clip) => {
+        const action = mixerRef.current.clipAction(clip);
+        action.reset();
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        action.play();
+        action.paused = true;
+        return action;
+      });
+      mixerRef.current.update(0);
+      detailActionsRef.current = actions;
+      wireframeVisualRef.current = detail;
+    } else {
+      if (detail) detail.visible = false;
+      if (edges) edges.visible = true;
+      detailActionsRef.current = [];
+      wireframeVisualRef.current = edges;
+    }
+
+    const target = wireframeVisualRef.current;
+    if (target) {
+      target.scale.set(0.1, 0.1, 0.1);
+      edgesAnimationRef.current = { isAnimating: true, startTime: Date.now(), targetScale: 1 };
+    }
+  }
+
+  function exitWireframeMode() {
+    if (edgesRef.current) edgesRef.current.visible = false;
+    if (detailRef.current) detailRef.current.visible = false;
+    mixerRef.current?.stopAllAction();
+    detailActionsRef.current = [];
+    wireframeVisualRef.current = null;
+  }
 
   useEffect(() => {
     showWireframeRef.current = showWireframe;
     if (solidRef.current) solidRef.current.visible = !showWireframe;
-    if (edgesRef.current) {
-      edgesRef.current.visible = showWireframe;
-      if (showWireframe) {
-        edgesAnimationRef.current = { isAnimating: true, startTime: Date.now(), targetScale: 1 };
-      }
-    }
-    if (!showWireframe && edges2Ref.current) {
-      // Leaving wireframe mode resets the detail reveal, so it plays in
-      // full again next time wireframe mode is entered.
-      edges2Ref.current.visible = false;
-      mixerRef.current?.stopAllAction();
+    if (showWireframe) {
+      enterWireframeMode();
+    } else {
+      exitWireframeMode();
     }
   }, [showWireframe]);
 
   function revealDetail() {
-    const edges2 = edges2Ref.current;
-    if (!edges2) return;
-    edges2.visible = true;
-    const clip = edges2ClipRef.current;
-    if (clip && mixerRef.current) {
-      const action = mixerRef.current.clipAction(clip);
-      action.reset();
-      action.setLoop(THREE.LoopOnce, 1);
-      action.clampWhenFinished = true;
-      action.play();
+    // Already frozen on their first frame (see enterWireframeMode) - this
+    // is the only thing that lets them actually play forward.
+    const actions = detailActionsRef.current;
+    if (actions.length > 0) {
+      actions.forEach((action) => {
+        action.paused = false;
+      });
+      return;
     }
+    // No authored animation - the detail group (if present) is a static
+    // fallback, shown on demand alongside Edges.
+    if (detailRef.current) detailRef.current.visible = true;
   }
 
   useEffect(() => {
@@ -168,12 +214,12 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (disposed) return;
 
         root = gltf.scene;
-        const { solid, edges, edges2, size } = buildModelParts(root);
+        const { solid, edges, detail, size } = buildModelParts(root);
         solidRef.current = solid;
         edgesRef.current = edges;
-        edges2Ref.current = edges2;
+        detailRef.current = detail;
         setHasEdges(Boolean(edges));
-        setHasEdges2(Boolean(edges2));
+        setHasDetail(Boolean(detail));
         // A user can tap "Wireframe" during the (slow, async) AR init window
         // before this load callback runs. If this model turns out to have no
         // separate Edges object, force showWireframe back off here too - not
@@ -183,16 +229,11 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         if (!edges) setShowWireframe(false);
 
         if (solid) solid.visible = !showWireframeRef.current;
-        if (edges) {
-          edges.visible = showWireframeRef.current;
-          edges.scale.set(0.1, 0.1, 0.1);
-          if (showWireframeRef.current) {
-            edgesAnimationRef.current = { isAnimating: true, startTime: Date.now(), targetScale: 1 };
-          }
-        }
 
         mixerRef.current = new THREE.AnimationMixer(root);
-        edges2ClipRef.current = findClipForObject(gltf.animations, edges2);
+        detailClipsRef.current = findClipsForObject(gltf.animations, detail);
+
+        if (showWireframeRef.current) enterWireframeMode();
 
         // Most uploaded GLBs aren't authored in accurate real-world
         // meters, so trusting the model's own scale (as contentGroup's
@@ -262,14 +303,16 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
         }
         lastTime = time;
 
-        // Animate edges expansion when entering wireframe mode
-        if (edgesAnimationRef.current.isAnimating && edgesRef.current) {
+        // Animate the opening scale-in of whichever object was shown first
+        // when entering wireframe mode (Edges, or the detail group frozen
+        // on frame 0).
+        if (edgesAnimationRef.current.isAnimating && wireframeVisualRef.current) {
           const elapsed = Date.now() - edgesAnimationRef.current.startTime;
           const duration = 500; // 500ms animation
           const progress = Math.min(elapsed / duration, 1);
           const eased = easeOutCubic(progress);
           const currentScale = 0.1 + eased * (edgesAnimationRef.current.targetScale - 0.1);
-          edgesRef.current.scale.set(currentScale, currentScale, currentScale);
+          wireframeVisualRef.current.scale.set(currentScale, currentScale, currentScale);
 
           if (progress >= 1) {
             edgesAnimationRef.current.isAnimating = false;
@@ -344,8 +387,8 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
             <button
               type="button"
               onClick={revealDetail}
-              disabled={!hasEdges2}
-              title={hasEdges2 ? undefined : "This item has no detail view authored"}
+              disabled={!hasDetail}
+              title={hasDetail ? undefined : "This item has no detail view authored"}
             >
               Reveal Detail
             </button>
