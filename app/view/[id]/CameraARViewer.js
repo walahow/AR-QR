@@ -392,35 +392,44 @@ export default function CameraARViewer({ glbUrl, arTargetUrl, onExit }) {
       <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative", zIndex: 0, overflow: "hidden" }} />
 
       <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <ModeSwitch
-            value={showWireframe ? "wireframe" : "normal"}
-            onChange={(v) => setShowWireframe(v === "wireframe")}
-            options={[
-              { value: "normal", label: "Normal" },
-              {
-                value: "wireframe",
-                label: "Wireframe",
-                disabled: !hasEdges,
-                disabledReason: "This item's model doesn't have separate Solid/Edges objects",
-              },
-            ]}
-          />
-          {showWireframe && (
-            <button
-              type="button"
-              onClick={revealDetail}
-              disabled={!hasDetail}
-              title={hasDetail ? undefined : "This item has no detail view authored"}
-            >
-              Reveal Detail
-            </button>
-          )}
-        </div>
+        <ModeSwitch
+          value={showWireframe ? "wireframe" : "normal"}
+          onChange={(v) => setShowWireframe(v === "wireframe")}
+          options={[
+            { value: "normal", label: "Normal" },
+            {
+              value: "wireframe",
+              label: "Wireframe",
+              disabled: !hasEdges,
+              disabledReason: "This item's model doesn't have separate Solid/Edges objects",
+            },
+          ]}
+        />
         <button type="button" onClick={onExit}>
           Exit AR
         </button>
       </div>
+
+      {/*
+        Lives at the bottom, not alongside ModeSwitch/Exit AR up top - the
+        top bar is narrow on a phone screen, and a third control there
+        pushed Exit AR partway off-screen. Only shown once a target is
+        actually being tracked (not scanning/error), so it never competes
+        for the same bottom-16 space as the status messages below, which
+        only render for those other states.
+      */}
+      {showWireframe && status === "tracking" && (
+        <div style={{ position: "absolute", bottom: 16, left: 16, right: 16, display: "flex", justifyContent: "center" }}>
+          <button
+            type="button"
+            onClick={revealDetail}
+            disabled={!hasDetail}
+            title={hasDetail ? undefined : "This item has no detail view authored"}
+          >
+            Reveal Detail
+          </button>
+        </div>
+      )}
 
       {status === "scanning" && (
         <div style={{ position: "absolute", bottom: 16, left: 16, right: 16, textAlign: "center", color: "#fff", background: "rgba(0,0,0,0.6)", padding: 8 }}>
